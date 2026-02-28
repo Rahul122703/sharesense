@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+// app/api/notes/delete-multiple/route.js
 
-const prisma = new PrismaClient();
+import { NextResponse } from "next/server";
+import { supabase } from "../../../lib/supabase";
 
 export async function POST(req) {
   try {
@@ -10,23 +10,28 @@ export async function POST(req) {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json(
         { error: "ids (array) is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // ✅ Delete multiple notes
-    const deletedNotes = await prisma.note.deleteMany({
-      where: {
-        id: { in: ids },
-      },
-    });
+    const { data, error } = await supabase
+      .from("notes")
+      .delete()
+      .in("id", ids)
+      .select("id"); // return deleted rows
 
-    return NextResponse.json({ success: true, deleted: deletedNotes });
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      deleted: data?.length || 0,
+    });
   } catch (error) {
     console.error("DeleteMultipleNotes API Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

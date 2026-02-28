@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+// app/api/notes/upload-to-end/route.js
 
-const prisma = new PrismaClient();
+import { NextResponse } from "next/server";
+import { supabase } from "../../../lib/supabase";
 
 export async function POST(req) {
   try {
@@ -10,54 +10,63 @@ export async function POST(req) {
     if (!noteId) {
       return NextResponse.json(
         { error: "noteId is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     let note;
 
-    if (filterMode === "general") {
-      // ✅ Just update timing
-      note = await prisma.note.update({
-        where: { id: noteId },
-        data: { timing: new Date() },
-      });
-    } else if (filterMode === "user") {
-      // ✅ Update timing + create a user-specific copy (no userId/username)
-      const updatedNote = await prisma.note.update({
-        where: { id: noteId },
-        data: { timing: new Date() },
-      });
+    // 🔹 1. Update timing
+    const { data: updatedNote, error: updateError } = await supabase
+      .from("notes")
+      .update({ timing: new Date().toISOString() })
+      .eq("id", noteId)
+      .select()
+      .single();
 
-      const userNote = await prisma.note.create({
-        data: {
+    if (updateError || !updatedNote) {
+      return NextResponse.json({ error: "Note not found" }, { status: 404 });
+    }
+
+    if (filterMode === "general") {
+      note = updatedNote;
+    } else if (filterMode === "user") {
+      // 🔹 Create user-specific copy (no user info)
+      const { data: userNote, error: userError } = await supabase
+        .from("notes")
+        .insert({
           content: updatedNote.content,
-          isGlobal: false,
-        },
-      });
+          is_global: false,
+        })
+        .select()
+        .single();
+
+      if (userError) throw userError;
 
       note = { updatedNote, userNote };
     } else if (filterMode === "both") {
-      // ✅ Update timing + create both copies
-      const updatedNote = await prisma.note.update({
-        where: { id: noteId },
-        data: { timing: new Date() },
-      });
+      // 🔹 Create both copies
+      const { data: globalNote, error: globalError } = await supabase
+        .from("notes")
+        .insert({
+          content: updatedNote.content,
+          is_global: true,
+        })
+        .select()
+        .single();
 
-      const [globalNote, userNote] = await Promise.all([
-        prisma.note.create({
-          data: {
-            content: updatedNote.content,
-            isGlobal: true,
-          },
-        }),
-        prisma.note.create({
-          data: {
-            content: updatedNote.content,
-            isGlobal: false,
-          },
-        }),
-      ]);
+      if (globalError) throw globalError;
+
+      const { data: userNote, error: userError } = await supabase
+        .from("notes")
+        .insert({
+          content: updatedNote.content,
+          is_global: false,
+        })
+        .select()
+        .single();
+
+      if (userError) throw userError;
 
       note = { updatedNote, globalNote, userNote };
     }
@@ -67,7 +76,7 @@ export async function POST(req) {
     console.error("UploadNoteToEnd API Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

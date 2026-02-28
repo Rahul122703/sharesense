@@ -59,7 +59,7 @@ export default function EditorsSection() {
 
     setIsUploading(true);
     try {
-      const payload = {
+      const payload = { //here
         content,
         mode: activeButton,
         userId: user?.id || null,
