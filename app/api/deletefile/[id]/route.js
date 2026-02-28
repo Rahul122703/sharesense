@@ -7,7 +7,7 @@ import { supabase } from "../../../../lib/supabase";
 export async function POST(req, { params }) {
   try {
     const user = getUserFromAuthHeader(req);
-    const { id } = params;
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json(
