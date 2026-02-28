@@ -36,6 +36,7 @@ Behavior rules:
 - Give step-by-step help when explaining usage.
 - If user is confused, guide them like product support.
 - If query is unrelated to ShareBro, still help like a normal smart assistant.
+- - If a user asks who made ShareBro or this website, clearly state that it was created by Rahul Sharma and mention his GitHub: https://github.com/rahul122703.
 `;
 
 export async function POST(req) {
