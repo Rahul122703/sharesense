@@ -1,17 +1,19 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+// app/api/notes/[id]/route.js
 
-const prisma = new PrismaClient();
+import { NextResponse } from "next/server";
+import { supabase } from "../../../../lib/supabase";
 
 export async function GET(req, { params }) {
   try {
     const { id } = params;
 
-    const note = await prisma.note.findUnique({
-      where: { id: id },
-    });
+    const { data: note, error } = await supabase
+      .from("notes")
+      .select("*")
+      .eq("id", id)
+      .single();
 
-    if (!note) {
+    if (error || !note) {
       return NextResponse.json({ error: "Note not found" }, { status: 404 });
     }
 
@@ -20,7 +22,7 @@ export async function GET(req, { params }) {
     console.error("Error fetching note:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -34,17 +36,24 @@ export async function PUT(req, { params }) {
       return NextResponse.json({ error: "Invalid data" }, { status: 400 });
     }
 
-    const updatedNote = await prisma.note.update({
-      where: { id },
-      data: { content },
-    });
+    const { data: updatedNote, error } = await supabase
+      .from("notes")
+      .update({ content })
+      .eq("id", id)
+      .select()
+      .single();
 
-    return NextResponse.json({ success: true, note: updatedNote });
+    if (error) throw error;
+
+    return NextResponse.json({
+      success: true,
+      note: updatedNote,
+    });
   } catch (error) {
     console.error("AutoSave API Error:", error);
     return NextResponse.json(
       { error: "Internal Server Error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

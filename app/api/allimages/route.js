@@ -1,29 +1,24 @@
-// pages/api/allimages/route.js
+// app/api/allimages/route.js
+
 import { NextResponse } from "next/server";
-import prisma from "../../../lib/prisma";
+import { supabase } from "../../../lib/supabase";
 
 export async function GET(req) {
   try {
-    // Fetch all files that are images
-    const images = await prisma.file.findMany({
-      where: {
-        mimeType: {
-          startsWith: "image/", // filter only image files
-        },
-      },
-      include: {
-        uploadedBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    const { data: images, error } = await supabase
+      .from("files")
+      .select(`
+        *,
+        users:uploaded_by_id (
+          id,
+          name,
+          email
+        )
+      `)
+      .like("mime_type", "image/%")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
 
     return NextResponse.json({ images });
   } catch (err) {

@@ -1,28 +1,31 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+// app/api/notes/last-general/route.js
 
-const prisma = new PrismaClient();
+import { NextResponse } from "next/server";
+import { supabase } from "../../../lib/supabase";
 
 export async function GET() {
   try {
-    const lastNote = await prisma.note.findFirst({
-      where: {
-        authorId: null,
-      },
-      orderBy: {
-        timing: "desc",
-      },
-      include: {
-        author: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
+    const { data: lastNote, error } = await supabase
+      .from("notes")
+      .select(
+        `
+        *,
+        users:created_by_id (
+          id,
+          name,
+          email
+        )
+      `,
+      )
+      .is("created_by_id", null)
+      .order("timing", { ascending: false })
+      .limit(1)
+      .single();
 
-    if (!lastNote) {
+    if (error || !lastNote) {
       return NextResponse.json(
         { error: "No matching note found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -31,7 +34,7 @@ export async function GET() {
     console.error("Error fetching last note:", error);
     return NextResponse.json(
       { error: "Failed to fetch last note" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

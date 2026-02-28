@@ -1,85 +1,109 @@
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+// app/api/notes/route.js
+
+import { NextResponse } from "next/server";
+import { supabase } from "../../../lib/supabase";
 
 export async function POST(req) {
   try {
     const body = await req.json();
-
     const { content, mode: rawMode, userId, userName } = body;
 
     if (!content || !content.trim()) {
-      return new Response(JSON.stringify({ error: "Content is required" }), {
-        status: 400,
-      });
+      return NextResponse.json(
+        { error: "Content is required" },
+        { status: 400 },
+      );
     }
 
-    // Decide the real mode
     const effectiveMode =
       !userId || rawMode === "general" ? "general" : rawMode;
 
     let note;
 
     if (effectiveMode === "general") {
-      note = await prisma.note.create({
-        data: { content, isGlobal: false, authorName: userName ?? null },
-      });
-    } else if (effectiveMode === "user") {
-      note = await prisma.note.create({
-        data: {
+      const { data, error } = await supabase
+        .from("notes")
+        .insert({
           content,
-          isGlobal: false,
-          authorName: userName ?? null,
-          author: { connect: { id: userId } },
-        },
-      });
+          is_global: false,
+          author_name: userName ?? null,
+          created_by_id: null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      note = data;
+    } else if (effectiveMode === "user") {
+      const { data, error } = await supabase
+        .from("notes")
+        .insert({
+          content,
+          is_global: false,
+          author_name: userName ?? null,
+          created_by_id: userId,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      note = data;
     } else if (effectiveMode === "both") {
-      // Create one global (with author id) + one user-specific (without author id)
-      const [globalNote, userNote] = await Promise.all([
-        prisma.note.create({
-          data: {
-            content,
-            isGlobal: true,
-            authorName: userName ?? null,
-            author: { connect: { id: userId } }, // keep author id here
-          },
-        }),
-        prisma.note.create({
-          data: {
-            content,
-            isGlobal: false,
-            authorName: userName ?? null,
-            // ❌ no author relation (empty authorId)
-          },
-        }),
-      ]);
+      const { data: globalNote, error: err1 } = await supabase
+        .from("notes")
+        .insert({
+          content,
+          is_global: true,
+          author_name: userName ?? null,
+          created_by_id: userId,
+        })
+        .select()
+        .single();
+
+      if (err1) throw err1;
+
+      const { data: userNote, error: err2 } = await supabase
+        .from("notes")
+        .insert({
+          content,
+          is_global: false,
+          author_name: userName ?? null,
+          created_by_id: null,
+        })
+        .select()
+        .single();
+
+      if (err2) throw err2;
+
       note = { globalNote, userNote };
     }
 
-    return new Response(JSON.stringify(note), { status: 201 });
+    return NextResponse.json(note, { status: 201 });
   } catch (error) {
     console.error("Error saving note:", error);
-    return new Response(JSON.stringify({ error: "Failed to save note" }), {
-      status: 500,
-    });
+    return NextResponse.json({ error: "Failed to save note" }, { status: 500 });
   }
 }
 
 export async function GET() {
   try {
-    const lastNote = await prisma.note.findFirst({
-      orderBy: { timing: "desc" },
-    });
+    const { data, error } = await supabase
+      .from("notes")
+      .select("*")
+      .order("timing", { ascending: false })
+      .limit(1)
+      .single();
 
-    if (!lastNote) {
-      return new Response(JSON.stringify({ error: "No notes found" }), {
-        status: 404,
-      });
+    if (error) {
+      return NextResponse.json({ error: "No notes found" }, { status: 404 });
     }
-    return new Response(JSON.stringify(lastNote), { status: 200 });
+
+    return NextResponse.json(data, { status: 200 });
   } catch (error) {
     console.error("Error fetching note:", error);
-    return new Response(JSON.stringify({ error: "Failed to fetch note" }), {
-      status: 500,
-    });
+    return NextResponse.json(
+      { error: "Failed to fetch note" },
+      { status: 500 },
+    );
   }
 }

@@ -1,7 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+// app/api/notes/filter/route.js
 
-const prisma = new PrismaClient();
-
+import { NextResponse } from "next/server";
+import { supabase } from "../../../../lib/supabase";
 /**
  * POST /api/notes/filter
  * Body: { mode: "general" | "user" | "both", userId?: string }
@@ -10,61 +10,60 @@ export async function POST(req) {
   try {
     const { mode, userId } = await req.json();
 
-    let where = {};
+    let query = supabase
+      .from("notes")
+      .select("*")
+      .order("timing", { ascending: false });
 
     switch (mode) {
       case "general":
-        where = { isGlobal: false, authorId: null };
+        query = query.eq("is_global", false).is("created_by_id", null);
         break;
 
       case "user":
-        // Only this user's private notes
         if (!userId) {
-          return new Response(
-            JSON.stringify({ error: "userId required for user mode" }),
-            { status: 400 }
+          return NextResponse.json(
+            { error: "userId required for user mode" },
+            { status: 400 },
           );
         }
-        where = {
-          isGlobal: false,
-          authorId: userId,
-          authorName: { not: null },
-        };
+
+        query = query
+          .eq("is_global", false)
+          .eq("created_by_id", userId)
+          .not("author_name", "is", null);
         break;
 
       case "both":
-        // User’s global notes (isGlobal = true)
         if (!userId) {
-          return new Response(
-            JSON.stringify({ error: "userId required for both mode" }),
-            { status: 400 }
+          return NextResponse.json(
+            { error: "userId required for both mode" },
+            { status: 400 },
           );
         }
-        where = {
-          isGlobal: true,
-          authorId: userId,
-          authorName: { not: null },
-        };
+
+        query = query
+          .eq("is_global", true)
+          .eq("created_by_id", userId)
+          .not("author_name", "is", null);
         break;
 
       default:
-        // Default to general notes
-        where = { isGlobal: false, authorId: null };
+        query = query.eq("is_global", false).is("created_by_id", null);
     }
 
-    const notes = await prisma.note.findMany({
-      where,
-      orderBy: { timing: "desc" },
-    });
+    const { data: notes, error } = await query;
 
-    return new Response(JSON.stringify(notes), { status: 200 });
+    if (error) throw error;
+
+    return NextResponse.json(notes, { status: 200 });
   } catch (error) {
     console.error("Error filtering notes:", error);
-    return new Response(
-      JSON.stringify({
+    return NextResponse.json(
+      {
         error: error.message || "Failed to fetch filtered notes",
-      }),
-      { status: 500 }
+      },
+      { status: 500 },
     );
   }
 }
